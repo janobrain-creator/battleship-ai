@@ -1,4 +1,4 @@
-const app = document.querySelector<HTMLDivElement>('#app');
-if (app) {
-  app.textContent = 'Battleship — coming soon';
-}
+import { startApp } from './ui/controller';
+import './ui/styles.css';
+
+startApp(document);
