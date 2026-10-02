@@ -3,10 +3,88 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Play Battleship against a computer opponent in your browser."
+    />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Battleship</title>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app" class="app">
+      <header class="topbar">
+        <div class="brand">
+          <img src="/favicon.svg" alt="" width="36" height="36" />
+          <div>
+            <h1>Battleship</h1>
+            <p class="tagline">You vs. the computer</p>
+          </div>
+        </div>
+        <button id="new-game" type="button" class="btn">New game</button>
+      </header>
+
+      <section id="status" class="status" aria-live="polite"></section>
+
+      <main class="layout">
+        <section class="panel" aria-labelledby="player-title">
+          <div class="panel-head">
+            <h2 id="player-title">Your fleet</h2>
+            <span id="player-count" class="badge"></span>
+          </div>
+          <div id="player-board" class="board" role="group" aria-label="Your board"></div>
+          <ul id="player-fleet" class="fleet-status" aria-label="Your ships"></ul>
+        </section>
+
+        <section id="placement-panel" class="panel" aria-labelledby="placement-title">
+          <div class="panel-head">
+            <h2 id="placement-title">Deploy your fleet</h2>
+          </div>
+          <p class="hint">
+            Choose a ship, then click your board to place it. Press <kbd>R</kbd> to rotate. Click a
+            placed ship to move it.
+          </p>
+          <div id="ship-picker" class="ship-picker" aria-label="Ships to place"></div>
+          <div class="controls">
+            <button id="rotate" type="button" class="btn"></button>
+            <button id="auto-place" type="button" class="btn">Auto-place</button>
+            <button id="reset" type="button" class="btn">Reset</button>
+          </div>
+          <p id="placement-message" class="placement-message" role="alert"></p>
+          <button id="start" type="button" class="btn btn-primary btn-block">Start battle</button>
+        </section>
+
+        <section id="enemy-panel" class="panel" aria-labelledby="enemy-title" hidden>
+          <div class="panel-head">
+            <h2 id="enemy-title">Enemy waters</h2>
+            <span id="enemy-count" class="badge"></span>
+          </div>
+          <div id="enemy-board" class="board" role="group" aria-label="Enemy board"></div>
+          <ul id="enemy-fleet" class="fleet-status" aria-label="Enemy ships"></ul>
+        </section>
+      </main>
+
+      <section class="bottom">
+        <div class="panel log-panel" aria-labelledby="log-title">
+          <div class="panel-head log-head">
+            <h2 id="log-title">Battle log</h2>
+            <span class="badge">Newest first</span>
+          </div>
+          <ol id="log" class="log"></ol>
+        </div>
+        <div class="panel legend-panel" aria-label="Legend">
+          <h2>Legend</h2>
+          <ul class="legend">
+            <li><span class="cell ship legend-ship"></span>Your ship</li>
+            <li><span class="cell hit"></span>Hit</li>
+            <li><span class="cell miss"></span>Miss</li>
+            <li><span class="cell sunk"></span>Sunk</li>
+          </ul>
+        </div>
+      </section>
+
+      <div id="toast" class="toast" role="status" aria-live="assertive" hidden></div>
+      <dialog id="dialog" class="dialog"></dialog>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
