@@ -1,6 +1,6 @@
-# Bugs and UI/UX changes
+# Battleship — Debugging Report
 
-Findings from the manual/UAT round on the playable preview (PR 3). Three real bugs were found; the other items were requested enhancements and are listed separately.
+A short report on the manual/UAT round run against the playable preview before release. It found three real bugs, each fixed and verified as described below. The other items were requested UI/UX enhancements, listed separately.
 
 ## Bugs found and fixed
 
@@ -47,3 +47,7 @@ Apart from the three bugs above, the manual stress test passed for: edge/corner 
 ## Automated checks
 
 `npm test` (6 files, 51 tests, including 5 new placement tests), `npm run lint`, `npm run typecheck`, `npm run format:check` and `npm run build` all pass.
+
+## Final verification
+
+The fixes and enhancements were then re-checked by hand on the updated preview, and all three bugs were confirmed fixed.
