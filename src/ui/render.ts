@@ -1,16 +1,8 @@
-import {
-  canPlaceShip,
-  formatCoord,
-  getShot,
-  isFleetComplete,
-  isInBounds,
-  isSunk,
-  shipAt,
-  shipCells,
-  shipLength,
-} from '../game/board';
+import { formatCoord, getShot, isFleetComplete, isSunk, sameCoord, shipAt } from '../game/board';
 import { BOARD_SIZE, COLUMN_LABELS, FLEET } from '../game/constants';
 import type { Board, Coord, GameState, Orientation, Ship, ShipName } from '../game/types';
+import { previewPlacement } from './placement';
+import { shipIcon } from './ships';
 
 export type DialogKind = 'first-player' | 'game-over' | 'confirm-new';
 
@@ -18,9 +10,14 @@ export type DialogKind = 'first-player' | 'game-over' | 'confirm-new';
 export interface UiState {
   selectedShip: ShipName | null;
   orientation: Orientation;
+  /** Index of the selected ship's segment that sits under the pointer. */
+  segment: number;
   hover: Coord | null;
   dialog: DialogKind | null;
   message: string;
+  /** Enemy cell briefly flagged after an attempt to fire at it twice. */
+  rejected: Coord | null;
+  toast: string | null;
 }
 
 export interface View {
@@ -44,6 +41,7 @@ export interface View {
   enemyCount: HTMLElement;
   enemyFleet: HTMLElement;
   log: HTMLElement;
+  toast: HTMLElement;
   dialog: HTMLDialogElement;
   dialogKind: DialogKind | null;
 }
@@ -98,7 +96,7 @@ export function createView(root: ParentNode): View {
     const button = make('button', 'ship-option');
     button.type = 'button';
     button.dataset.ship = spec.name;
-    button.append(make('span', 'ship-name', spec.name), pips(spec.length));
+    button.append(shipIcon(spec.name), make('span', 'ship-name', spec.name), pips(spec.length));
     shipPicker.append(button);
     shipButtons.set(spec.name, button);
   }
@@ -125,6 +123,7 @@ export function createView(root: ParentNode): View {
     enemyCount: find(root, '#enemy-count'),
     enemyFleet: find(root, '#enemy-fleet'),
     log: find(root, '#log'),
+    toast: find(root, '#toast'),
     dialog: find(root, '#dialog'),
     dialogKind: null,
   };
@@ -151,11 +150,14 @@ function placementPreview(
   ui: UiState,
 ): { cells: Set<string>; valid: boolean } | null {
   if (state.phase !== 'placement' || !ui.selectedShip || !ui.hover) return null;
-  const cells = shipCells(ui.hover, shipLength(ui.selectedShip), ui.orientation).filter(isInBounds);
-  return {
-    cells: new Set(cells.map(key)),
-    valid: canPlaceShip(state.player, ui.selectedShip, ui.hover, ui.orientation),
-  };
+  const preview = previewPlacement(
+    state.player,
+    ui.selectedShip,
+    ui.hover,
+    ui.segment,
+    ui.orientation,
+  );
+  return { cells: new Set(preview.cells.map(key)), valid: preview.valid };
 }
 
 function renderPlayerBoard(view: View, state: GameState, ui: UiState): void {
@@ -192,7 +194,7 @@ function renderPlayerBoard(view: View, state: GameState, ui: UiState): void {
   );
 }
 
-function renderEnemyBoard(view: View, state: GameState): void {
+function renderEnemyBoard(view: View, state: GameState, ui: UiState): void {
   const board = state.ai;
   const canFire = state.phase === 'battle' && state.turn === 'player';
   view.enemyBoard.classList.toggle('armed', canFire);
@@ -222,8 +224,11 @@ function renderEnemyBoard(view: View, state: GameState): void {
         }
       }
       if (isLastShot(state, 'player', coord)) classes.push('last');
+      if (shot !== 'unknown') classes.push('fired');
+      if (ui.rejected && sameCoord(ui.rejected, coord)) classes.push('rejected');
       cell.className = classes.join(' ');
-      cell.disabled = !canFire || shot !== 'unknown';
+      cell.disabled = !canFire;
+      cell.setAttribute('aria-disabled', String(shot !== 'unknown'));
       cell.setAttribute('aria-label', `Enemy board ${formatCoord(coord)}: ${description}`);
     }),
   );
@@ -243,6 +248,7 @@ function renderFleet(
       item.classList.toggle('sunk', sunk);
       item.classList.toggle('pending', showPending && !ship);
       item.append(
+        shipIcon(spec.name),
         make('span', 'fleet-name', spec.name),
         pips(spec.length, sunk ? spec.length : showDamage ? (ship?.hits ?? 0) : 0),
       );
@@ -297,7 +303,19 @@ function renderPlacementControls(view: View, state: GameState, ui: UiState): voi
 
 function renderLog(view: View, state: GameState): void {
   const entries = state.log.slice(-8).reverse();
-  view.log.replaceChildren(...entries.map((text, i) => make('li', i === 0 ? 'latest' : '', text)));
+  view.log.replaceChildren(
+    ...entries.map((text, i) => {
+      const item = make('li', i === 0 ? 'latest' : '');
+      if (i === 0) item.append(make('span', 'latest-tag', 'Latest'));
+      item.append(make('span', '', text));
+      return item;
+    }),
+  );
+}
+
+function renderToast(view: View, ui: UiState): void {
+  view.toast.hidden = !ui.toast;
+  view.toast.textContent = ui.toast ?? '';
 }
 
 function accuracy(hits: number, shots: number): string {
@@ -366,7 +384,7 @@ export function render(view: View, state: GameState, ui: UiState): void {
   view.newGameButton.classList.toggle('btn-primary', state.phase === 'over');
   renderStatus(view, state);
   renderPlayerBoard(view, state, ui);
-  renderEnemyBoard(view, state);
+  renderEnemyBoard(view, state, ui);
   view.playerCount.textContent = placing
     ? `${state.player.ships.length} of ${FLEET.length} placed`
     : afloat(state.player);
@@ -375,5 +393,6 @@ export function render(view: View, state: GameState, ui: UiState): void {
   renderFleet(view.enemyFleet, state.ai, false, false);
   renderPlacementControls(view, state, ui);
   renderLog(view, state);
+  renderToast(view, ui);
   renderDialog(view, state, ui);
 }

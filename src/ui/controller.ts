@@ -1,4 +1,4 @@
-import { isFleetComplete, shipAt } from '../game/board';
+import { getShot, isFleetComplete, shipAt } from '../game/board';
 import { FLEET } from '../game/constants';
 import {
   aiFire,
@@ -12,21 +12,28 @@ import {
 } from '../game/game';
 import { createRng, randomSeed, type Rng } from '../game/random';
 import type { ActionResult, Board, Coord, FirstPlayer, GameState, ShipName } from '../game/types';
+import { bowFor, centerSegment, grabbedSegment, orientationOf } from './placement';
 import { createView, render, type UiState } from './render';
 
 const AI_DELAY_MS = 700;
+const TOAST_MS = 2000;
+const REJECT_FLASH_MS = 650;
 
 function nextUnplacedShip(board: Board): ShipName | null {
   return FLEET.find((spec) => !board.ships.some((s) => s.name === spec.name))?.name ?? null;
 }
 
 function initialUi(): UiState {
+  const selectedShip = FLEET[0]?.name ?? null;
   return {
-    selectedShip: FLEET[0]?.name ?? null,
+    selectedShip,
     orientation: 'horizontal',
+    segment: selectedShip ? centerSegment(selectedShip) : 0,
     hover: null,
     dialog: null,
     message: '',
+    rejected: null,
+    toast: null,
   };
 }
 
@@ -47,6 +54,8 @@ export function startApp(root: ParentNode, rng: Rng = createRng(randomSeed())): 
   let ui: UiState = initialUi();
   let gameId = 0;
   let aiTimer: ReturnType<typeof setTimeout> | undefined;
+  let toastTimer: ReturnType<typeof setTimeout> | undefined;
+  let rejectTimer: ReturnType<typeof setTimeout> | undefined;
 
   const update = (): void => render(view, state, ui);
 
@@ -59,6 +68,8 @@ export function startApp(root: ParentNode, rng: Rng = createRng(randomSeed())): 
   function startNewGame(): void {
     gameId++;
     clearTimeout(aiTimer);
+    clearTimeout(toastTimer);
+    clearTimeout(rejectTimer);
     state = newGame(rng);
     ui = initialUi();
     update();
@@ -78,6 +89,33 @@ export function startApp(root: ParentNode, rng: Rng = createRng(randomSeed())): 
       apply(aiFire(state, rng));
       afterShot();
     }, AI_DELAY_MS);
+  }
+
+  function selectShip(name: ShipName | null): void {
+    ui.selectedShip = name;
+    ui.segment = name ? centerSegment(name) : 0;
+  }
+
+  function showToast(text: string): void {
+    clearTimeout(toastTimer);
+    ui.toast = text;
+    toastTimer = setTimeout(() => {
+      ui.toast = null;
+      update();
+    }, TOAST_MS);
+  }
+
+  function flashRejected(coord: Coord): void {
+    clearTimeout(rejectTimer);
+    ui.rejected = null;
+    update();
+    void view.enemyBoard.offsetWidth; // restart the CSS animation on repeat clicks
+    ui.rejected = coord;
+    update();
+    rejectTimer = setTimeout(() => {
+      ui.rejected = null;
+      update();
+    }, REJECT_FLASH_MS);
   }
 
   function setHover(coord: Coord | null): void {
@@ -100,12 +138,22 @@ export function startApp(root: ParentNode, rng: Rng = createRng(randomSeed())): 
     if (existing) {
       apply(removePlayerShip(state, existing.name));
       ui.selectedShip = existing.name;
-      ui.orientation =
-        existing.cells[0]?.row === existing.cells[1]?.row ? 'horizontal' : 'vertical';
+      ui.segment = grabbedSegment(existing, coord);
+      ui.orientation = orientationOf(existing);
+      ui.hover = coord;
     } else if (!ui.selectedShip) {
       ui.message = 'Choose a ship to place first.';
-    } else if (apply(placePlayerShip(state, ui.selectedShip, coord, ui.orientation))) {
-      ui.selectedShip = nextUnplacedShip(state.player);
+    } else if (
+      apply(
+        placePlayerShip(
+          state,
+          ui.selectedShip,
+          bowFor(coord, ui.segment, ui.orientation),
+          ui.orientation,
+        ),
+      )
+    ) {
+      selectShip(nextUnplacedShip(state.player));
     }
     update();
   }
@@ -115,7 +163,7 @@ export function startApp(root: ParentNode, rng: Rng = createRng(randomSeed())): 
     if (state.player.ships.some((s) => s.name === name)) {
       apply(removePlayerShip(state, name));
     }
-    ui.selectedShip = name;
+    selectShip(name);
     ui.message = '';
     update();
   }
@@ -155,10 +203,25 @@ export function startApp(root: ParentNode, rng: Rng = createRng(randomSeed())): 
     if (!view.playerBoard.contains(event.relatedTarget as Node | null)) setHover(null);
   });
 
+  // Mouse clicks must not leave a board cell focused, or the next key press (e.g. R)
+  // makes the browser draw a keyboard focus ring around it.
+  for (const board of [view.playerBoard, view.enemyBoard]) {
+    board.addEventListener('mousedown', (event) => {
+      if (coordOf(event.target)) event.preventDefault();
+    });
+  }
+
   view.enemyBoard.addEventListener('click', (event) => {
     const coord = coordOf(event.target);
     if (!coord || state.phase !== 'battle' || state.turn !== 'player') return;
-    if (apply(playerFire(state, coord))) afterShot();
+    if (getShot(state.ai, coord) !== 'unknown') {
+      flashRejected(coord);
+      return;
+    }
+    if (!apply(playerFire(state, coord))) return;
+    const shot = state.lastShot?.result;
+    if (shot?.outcome === 'sunk' && shot.ship) showToast(`Enemy ${shot.ship.name} sunk!`);
+    afterShot();
   });
 
   view.shipPicker.addEventListener('click', (event) => {
@@ -171,13 +234,13 @@ export function startApp(root: ParentNode, rng: Rng = createRng(randomSeed())): 
 
   view.autoPlaceButton.addEventListener('click', () => {
     apply(autoPlacePlayer(state, rng));
-    ui.selectedShip = null;
+    selectShip(null);
     update();
   });
 
   view.resetButton.addEventListener('click', () => {
     apply(resetPlacement(state));
-    ui.selectedShip = nextUnplacedShip(state.player);
+    selectShip(nextUnplacedShip(state.player));
     update();
   });
 

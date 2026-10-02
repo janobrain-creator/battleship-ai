@@ -65,13 +65,16 @@
 
       <section class="bottom">
         <div class="panel log-panel" aria-labelledby="log-title">
-          <h2 id="log-title">Battle log</h2>
+          <div class="panel-head log-head">
+            <h2 id="log-title">Battle log</h2>
+            <span class="badge">Newest first</span>
+          </div>
           <ol id="log" class="log"></ol>
         </div>
         <div class="panel legend-panel" aria-label="Legend">
           <h2>Legend</h2>
           <ul class="legend">
-            <li><span class="cell ship ship-h ship-start ship-end"></span>Your ship</li>
+            <li><span class="cell ship legend-ship"></span>Your ship</li>
             <li><span class="cell hit"></span>Hit</li>
             <li><span class="cell miss"></span>Miss</li>
             <li><span class="cell sunk"></span>Sunk</li>
@@ -79,6 +82,7 @@
         </div>
       </section>
 
+      <div id="toast" class="toast" role="status" aria-live="assertive" hidden></div>
       <dialog id="dialog" class="dialog"></dialog>
     </div>
     <script type="module" src="/src/main.ts"></script>
